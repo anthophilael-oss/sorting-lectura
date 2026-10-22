@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Clasificador de Palabras</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #EEF2FF;
+        }
+        .drop-zone-active {
+            border-style: dashed;
+            border-color: #6366F1 !important;
+            background-color: #EEF2FF !important;
+        }
+        .card-dragged {
+            opacity: 0.5;
+        }
+        .pulse-highlight {
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+            100% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0); }
+        }
+    </style>
+</head>
+<body class="min-h-screen text-slate-800 pb-12">
+
+    <!-- APP CONTAINER -->
+    <div id="app" class="max-w-7xl mx-auto px-4 py-6">
+        <!-- HEADER -->
+        <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
+            <div class="flex items-center gap-3">
+                <span class="text-4xl">📚</span>
+                <div>
+                    <h1 class="text-3xl font-extrabold text-slate-800 tracking-tight">Clasificador de Palabras</h1>
+                    <p id="header-subtitle" class="text-slate-500 font-medium">Selecciona un cuento para comenzar la actividad</p>
+                </div>
+            </div>
+            
+            <div id="top-controls" class="flex items-center gap-3">
+                <button onclick="exportStoriesJSON()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    <span>JSON</span>
+                </button>
+                <label class="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer transition-all">
+                    <i data-lucide="upload" class="w-5 h-5"></i>
+                    <span>Cargar</span>
+                    <input type="file" id="json-file-input" accept=".json" class="hidden" onchange="importStoriesJSON(event)">
+                </label>
+                <button onclick="openNewStoryModal()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <i data-lucide="plus" class="w-5 h-5"></i>
+                    <span>+ Nuevo Cuento</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- MAIN DASHBOARD VIEW -->
+        <main id="view-dashboard">
+            <!-- Grid Cuentos -->
+            <div id="stories-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-10">
+                <!-- Javascript alimentará los cuentos aquí -->
+            </div>
+
+            <!-- Sección ¿Cómo funciona? -->
+            <div class="bg-white rounded-2xl p-6 md:p-8 shadow-sm border border-slate-100">
+                <div class="flex items-center gap-3 mb-4 text-blue-600">
+                    <i data-lucide="info" class="w-6 h-6"></i>
+                    <h2 class="text-xl font-bold text-slate-800">¿Cómo funciona?</h2>
+                </div>
+                <ul class="space-y-3 text-slate-600 font-medium pl-2">
+                    <li class="flex items-center gap-2">
+                        <span class="text-blue-500 font-bold">✓</span> Selecciona un cuento para empezar
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <span class="text-blue-500 font-bold">✓</span> Arrastra cada tarjeta a la columna correcta (o haz clic para seleccionar y ubicar)
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <span class="text-blue-500 font-bold">✓</span> Si te equivocas, recibirás pistas progresivas (least-to-most prompts)
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <span class="text-blue-500 font-bold">✓</span> Necesitas clasificar correctamente las tarjetas para completar el organizador
+                    </li>
+                </ul>
+            </div>
+        </main>
+
+        <!-- SORTING ACTIVITY VIEW (HIDDEN INITIALLY) -->
+        <main id="view-activity" class="hidden space-y-6">
+            <!-- Barra de Progreso -->
+            <div class="bg-white rounded-2xl p-4 shadow-sm border border-slate-100">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="font-bold text-slate-700">Progreso</span>
+                    <span id="progress-text" class="font-semibold text-slate-500">0 de 8</span>
+                </div>
+                <div class="w-full bg-slate-100 rounded-full h-3.5 overflow-hidden">
+                    <div id="progress-bar" class="bg-indigo-600 h-3.5 rounded-full transition-all duration-300 w-0"></div>
+                </div>
+            </div>
+
+            <!-- Columnas de Categorías (5 Categorías) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                <!-- Columna 1: Quién -->
+                <div class="bg-white rounded-2xl border-2 border-blue-400 overflow-hidden flex flex-col shadow-sm">
+                    <div class="bg-blue-50 p-4 border-b border-blue-100 min-h-[120px]">
+                        <div class="flex items-center gap-2 text-blue-800 font-extrabold text-lg mb-1">
+                            <span class="text-2xl">👥</span> ¿Quién?
+                        </div>
+                        <p class="text-xs text-slate-600 font-medium">Las Personas son los individuos o grupos que aparecen en la historia.</p>
+                    </div>
+                    <div id="zone-quien" data-category="quien" class="drop-zone p-3 flex-1 min-h-[220px] flex flex-col items-center justify-start gap-2 border-2 border-dashed border-transparent transition-all">
+                        <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                            <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1 text-blue-500"></i>
+                            <span class="text-xs font-semibold">Arrastra aquí</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna 2: Qué objetos-cosas -->
+                <div class="bg-white rounded-2xl border-2 border-emerald-400 overflow-hidden flex flex-col shadow-sm">
+                    <div class="bg-emerald-50 p-4 border-b border-emerald-100 min-h-[120px]">
+                        <div class="flex items-center gap-2 text-emerald-800 font-extrabold text-lg mb-1">
+                            <span class="text-2xl">📦</span> ¿Qué objetos-cosas?
+                        </div>
+                        <p class="text-xs text-slate-600 font-medium">Se refiere a un objeto, cosa o elemento inanimado de la historia.</p>
+                    </div>
+                    <div id="zone-objetos" data-category="objetos" class="drop-zone p-3 flex-1 min-h-[220px] flex flex-col items-center justify-start gap-2 border-2 border-dashed border-transparent transition-all">
+                        <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                            <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1 text-emerald-500"></i>
+                            <span class="text-xs font-semibold">Arrastra aquí</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna 3: Qué tarea-evento -->
+                <div class="bg-white rounded-2xl border-2 border-amber-400 overflow-hidden flex flex-col shadow-sm">
+                    <div class="bg-amber-50 p-4 border-b border-amber-100 min-h-[120px]">
+                        <div class="flex items-center gap-2 text-amber-800 font-extrabold text-lg mb-1">
+                            <span class="text-2xl">📅</span> ¿Qué tarea-evento?
+                        </div>
+                        <p class="text-xs text-slate-600 font-medium">Es el incidente o suceso principal que describe de qué trata el relato.</p>
+                    </div>
+                    <div id="zone-evento" data-category="evento" class="drop-zone p-3 flex-1 min-h-[220px] flex flex-col items-center justify-start gap-2 border-2 border-dashed border-transparent transition-all">
+                        <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                            <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1 text-amber-500"></i>
+                            <span class="text-xs font-semibold">Arrastra aquí</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna 4: Dónde -->
+                <div class="bg-white rounded-2xl border-2 border-rose-400 overflow-hidden flex flex-col shadow-sm">
+                    <div class="bg-rose-50 p-4 border-b border-rose-100 min-h-[120px]">
+                        <div class="flex items-center gap-2 text-rose-800 font-extrabold text-lg mb-1">
+                            <span class="text-2xl">📍</span> ¿Dónde?
+                        </div>
+                        <p class="text-xs text-slate-600 font-medium">Los Lugares son los espacios o sitios donde ocurre la historia.</p>
+                    </div>
+                    <div id="zone-donde" data-category="donde" class="drop-zone p-3 flex-1 min-h-[220px] flex flex-col items-center justify-start gap-2 border-2 border-dashed border-transparent transition-all">
+                        <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                            <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1 text-rose-500"></i>
+                            <span class="text-xs font-semibold">Arrastra aquí</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Columna 5: Qué hace -->
+                <div class="bg-white rounded-2xl border-2 border-purple-400 overflow-hidden flex flex-col shadow-sm">
+                    <div class="bg-purple-50 p-4 border-b border-purple-100 min-h-[120px]">
+                        <div class="flex items-center gap-2 text-purple-800 font-extrabold text-lg mb-1">
+                            <span class="text-2xl">⚡</span> ¿Qué hace?
+                        </div>
+                        <p class="text-xs text-slate-600 font-medium">Se refiere a las acciones específicas o los pasos que realizan los personajes.</p>
+                    </div>
+                    <div id="zone-hace" data-category="hace" class="drop-zone p-3 flex-1 min-h-[220px] flex flex-col items-center justify-start gap-2 border-2 border-dashed border-transparent transition-all">
+                        <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                            <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1 text-purple-500"></i>
+                            <span class="text-xs font-semibold">Arrastra aquí</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Zona Tarjetas Disponibles -->
+            <div class="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
+                <div class="flex items-center gap-2 text-slate-800 font-bold mb-4">
+                    <span class="text-xl">📋</span>
+                    <h3 class="text-lg">Tarjetas Disponibles</h3>
+                </div>
+                <div id="cards-container" class="flex flex-wrap gap-3 min-h-[60px] items-center">
+                    <!-- Las tarjetas se cargarán dinámicamente -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- DIÁLOGO / MODAL DE PISTAS (SUPPORT DIALOG) -->
+    <div id="hint-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl relative border border-slate-100 transform transition-all">
+            <button onclick="closeHintModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            <div class="flex items-center gap-3 mb-4 text-amber-600">
+                <span class="text-2xl">💡</span>
+                <h3 id="hint-title" class="text-xl font-bold text-slate-800">Recordatorio de Definición</h3>
+            </div>
+            
+            <p id="hint-subtitle" class="text-indigo-600 font-semibold mb-3">Pista sobre la categoría correcta:</p>
+            
+            <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-5 text-center">
+                <p id="hint-body" class="italic text-slate-700 font-medium">"es el incidente o suceso principal que describe de qué trata el relato."</p>
+            </div>
+
+            <p id="hint-footer-question" class="text-indigo-600 font-medium text-center mb-6">¿Esta palabra pertenece a esta categoría?</p>
+
+            <button onclick="closeHintModal()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-xl transition-colors shadow-md">
+                Entendido
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL CREAR NUEVO CUENTO -->
+    <div id="new-story-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+        <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl relative border border-slate-100 max-h-[90vh] overflow-y-auto">
+            <button onclick="closeNewStoryModal()" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600">
+                <i data-lucide="x" class="w-6 h-6"></i>
+            </button>
+            
+            <h3 class="text-2xl font-extrabold text-slate-800 mb-6 flex items-center gap-2">
+                <span>➕</span> Crear Nuevo Cuento
+            </h3>
+
+            <form id="new-story-form" onsubmit="handleSaveStory(event)" class="space-y-4">
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Título del Cuento</label>
+                    <input type="text" id="story-title" required class="w-full px-4 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ej: El Planeta Rojo">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-bold text-slate-700 mb-1">Descripción Breve</label>
+                    <input type="text" id="story-desc" required class="w-full px-4 py-2 rounded-xl border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Ej: Una aventura espacial de exploración.">
+                </div>
+
+                <hr class="my-4 border-slate-200">
+
+                <h4 class="font-bold text-slate-800 text-md">Tarjetas del Cuento (Mínimo 3)</h4>
+                <div id="cards-form-list" class="space-y-3">
+                    <!-- Tarjetas para rellenar dinámicas -->
+                </div>
+
+                <button type="button" onclick="addCardInputRow()" class="text-indigo-600 font-bold text-sm hover:underline flex items-center gap-1">
+                    <i data-lucide="plus-circle" class="w-4 h-4"></i> Añadir otra tarjeta
+                </button>
+
+                <div class="flex justify-end gap-3 pt-4 border-t border-slate-100">
+                    <button type="button" onclick="closeNewStoryModal()" class="px-5 py-2.5 rounded-xl border border-slate-300 font-semibold text-slate-600 hover:bg-slate-50">Cancelar</button>
+                    <button type="submit" class="px-5 py-2.5 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 shadow-md">Guardar Cuento</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC -->
+    <script>
+        // DATOS DE EJEMPLO PRECARGADOS
+        const DEFAULT_STORIES = [
+            {
+                id: 'rev-francesa',
+                title: 'La Revolución Francesa',
+                description: 'Un evento histórico importante que cambió el mundo',
+                categoryDefinitions: {
+                    quien: "Las Personas son los individuos o grupos que aparecen en la historia.",
+                    objetos: "se refiere a un objeto, cosa o elemento inanimado de la historia.",
+                    evento: "es el incidente o suceso principal que describe de qué trata el relato.",
+                    donde: "Los Lugares son los espacios o sitios donde ocurre la historia.",
+                    hace: "se refiere a las acciones específicas o los pasos que realizan los personajes."
+                },
+                cards: [
+                    { id: 'c1', text: 'Luis XVI', category: 'quien' },
+                    { id: 'c2', text: 'El pueblo francés', category: 'quien' },
+                    { id: 'c3', text: 'Los revolucionarios', category: 'quien' },
+                    { id: 'c4', text: 'Pobreza e injusticia', category: 'objetos' },
+                    { id: 'c5', text: 'La toma de la Bastilla', category: 'evento' },
+                    { id: 'c6', text: 'París', category: 'donde' },
+                    { id: 'c7', text: 'Francia en 1789', category: 'donde' },
+                    { id: 'c8', text: 'Se transformó en una república', category: 'hace' }
+                ]
+            },
+            {
+                id: 'descubrimiento-america',
+                title: 'El Descubrimiento de América',
+                description: 'Un viaje que cambió la historia mundial',
+                cards: [
+                    { id: 'c10', text: 'Cristóbal Colón', category: 'quien' },
+                    { id: 'c11', text: 'Los Reyes Católicos', category: 'quien' },
+                    { id: 'c12', text: 'Las tres carabelas', category: 'objetos' },
+                    { id: 'c13', text: 'El viaje por el Atlántico', category: 'evento' },
+                    { id: 'c14', text: 'Isla de San Salvador', category: 'donde' },
+                    { id: 'c15', text: 'Navegaron hacia el oeste', category: 'hace' },
+                    { id: 'c16', text: 'España', category: 'donde' },
+                    { id: 'c17', text: 'Mapas y brújulas', category: 'objetos' }
+                ]
+            },
+            {
+                id: 'robot-explorador',
+                title: 'El Robot Explorador',
+                description: 'Una historia sobre tecnología y exploración',
+                cards: [
+                    { id: 'c20', text: 'Rover Curiosity', category: 'quien' },
+                    { id: 'c21', text: 'Científicos de la NASA', category: 'quien' },
+                    { id: 'c22', text: 'Paneles solares y cámara', category: 'objetos' },
+                    { id: 'c23', text: 'Superficie de Marte', category: 'donde' },
+                    { id: 'c24', text: 'Analizó muestras de suelo', category: 'hace' }
+                ]
+            }
+        ];
+
+        // STATE MANAGEMENT
+        let stories = [];
+        let currentStory = null;
+        let activeCards = [];
+        let completedCount = 0;
+        let selectedCard = null; // Para soporte táctil/clic
+
+        // CATEGORY METADATA
+        const categoryMeta = {
+            quien: { name: '¿Quién?', prompt: 'Las Personas son los individuos o grupos que aparecen en la historia.' },
+            objetos: { name: '¿Qué objetos-cosas?', prompt: 'se refiere a un objeto, cosa o elemento inanimado de la historia.' },
+            evento: { name: '¿Qué tarea-evento?', prompt: 'es el incidente o suceso principal que describe de qué trata el relato.' },
+            donde: { name: '¿Dónde?', prompt: 'Los Lugares son los espacios o sitios donde ocurre la historia.' },
+            hace: { name: '¿Qué hace?', prompt: 'se refiere a las acciones específicas o los pasos que realizan los personajes.' }
+        };
+
+        // INITIALIZATION
+        window.onload = function() {
+            loadStoriesFromStorage();
+            renderDashboard();
+            setupDropZones();
+            lucide.createIcons();
+        };
+
+        function loadStoriesFromStorage() {
+            const saved = localStorage.getItem('word_sorting_stories');
+            if (saved) {
+                try {
+                    stories = JSON.parse(saved);
+                } catch(e) {
+                    stories = [...DEFAULT_STORIES];
+                }
+            } else {
+                stories = [...DEFAULT_STORIES];
+            }
+        }
+
+        function saveStoriesToStorage() {
+            localStorage.setItem('word_sorting_stories', JSON.stringify(stories));
+        }
+
+        // DASHBOARD RENDER
+        function renderDashboard() {
+            const grid = document.getElementById('stories-grid');
+            grid.innerHTML = '';
+
+            stories.forEach(story => {
+                const card = document.createElement('div');
+                card.className = "bg-white rounded-2xl p-6 shadow-sm border border-slate-100 flex flex-col justify-between hover:shadow-md transition-all";
+                
+                card.innerHTML = `
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <div class="flex items-center gap-2">
+                                <span class="p-2 bg-indigo-50 text-indigo-600 rounded-lg"><i data-lucide="book-open" class="w-5 h-5"></i></span>
+                                <button onclick="exportSingleJSON('${story.id}')" class="bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+                                    <i data-lucide="download" class="w-3.5 h-3.5"></i> JSON
+                                </button>
+                                <button onclick="editStory('${story.id}')" class="bg-blue-500 hover:bg-blue-600 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+                                    <i data-lucide="edit-3" class="w-3.5 h-3.5"></i> Editar
+                                </button>
+                                ${!DEFAULT_STORIES.some(s => s.id === story.id) ? `
+                                <button onclick="deleteStory('${story.id}')" class="bg-rose-500 hover:bg-rose-600 text-white font-bold text-xs px-2.5 py-1.5 rounded-lg flex items-center gap-1">
+                                    <i data-lucide="x" class="w-3.5 h-3.5"></i> Eliminar
+                                </button>` : ''}
+                            </div>
+                        </div>
+                        <h3 class="text-xl font-bold text-slate-800 mb-2">${story.title}</h3>
+                        <p class="text-slate-500 text-sm mb-6">${story.description}</p>
+                    </div>
+                    <div class="flex items-center justify-between pt-4 border-t border-slate-100">
+                        <span class="text-xs font-semibold text-slate-500 flex items-center gap-1">
+                            <i data-lucide="layers" class="w-4 h-4"></i> ${story.cards.length} tarjetas
+                        </span>
+                        <button onclick="startActivity('${story.id}')" class="text-indigo-600 font-bold hover:text-indigo-800 flex items-center gap-1 text-sm">
+                            Iniciar →
+                        </button>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+            lucide.createIcons();
+        }
+
+        // START ACTIVITY
+        function startActivity(storyId) {
+            currentStory = stories.find(s => s.id === storyId);
+            if (!currentStory) return;
+
+            // UI View Swap
+            document.getElementById('view-dashboard').classList.add('hidden');
+            document.getElementById('view-activity').classList.remove('hidden');
+            
+            // Header updates
+            document.querySelector('header h1').innerText = currentStory.title;
+            document.getElementById('header-subtitle').innerText = 'Arrastra las tarjetas a la columna correcta';
+            
+            // Replace header controls with Back Button
+            const controls = document.getElementById('top-controls');
+            controls.innerHTML = `
+                <button onclick="exportSingleJSON('${currentStory.id}')" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    <span>JSON</span>
+                </button>
+                <button onclick="backToDashboard()" class="flex items-center gap-2 bg-slate-200 hover:bg-slate-300 text-slate-700 font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <span>← Atrás</span>
+                </button>
+            `;
+            lucide.createIcons();
+
+            // Setup state
+            activeCards = [...currentStory.cards];
+            completedCount = 0;
+            updateProgress();
+
+            // Clear zones
+            document.querySelectorAll('.drop-zone').forEach(zone => {
+                zone.innerHTML = `
+                    <div class="empty-placeholder text-center text-slate-400 py-8 flex flex-col items-center">
+                        <i data-lucide="arrow-down-square" class="w-8 h-8 mb-1"></i>
+                        <span class="text-xs font-semibold">Arrastra aquí</span>
+                    </div>
+                `;
+            });
+
+            // Populate cards
+            renderAvailableCards();
+        }
+
+        function backToDashboard() {
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            document.getElementById('view-activity').classList.add('hidden');
+            
+            document.querySelector('header h1').innerText = 'Clasificador de Palabras';
+            document.getElementById('header-subtitle').innerText = 'Selecciona un cuento para comenzar la actividad';
+            
+            const controls = document.getElementById('top-controls');
+            controls.innerHTML = `
+                <button onclick="exportStoriesJSON()" class="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <i data-lucide="download" class="w-5 h-5"></i>
+                    <span>JSON</span>
+                </button>
+                <label class="flex items-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm cursor-pointer transition-all">
+                    <i data-lucide="upload" class="w-5 h-5"></i>
+                    <span>Cargar</span>
+                    <input type="file" id="json-file-input" accept=".json" class="hidden" onchange="importStoriesJSON(event)">
+                </label>
+                <button onclick="openNewStoryModal()" class="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all">
+                    <i data-lucide="plus" class="w-5 h-5"></i>
+                    <span>+ Nuevo Cuento</span>
+                </button>
+            `;
+            lucide.createIcons();
+        }
+
+        function renderAvailableCards() {
+            const container = document.getElementById('cards-container');
+            container.innerHTML = '';
+
+            activeCards.forEach(card => {
+                const el = document.createElement('div');
+                el.id = `card-${card.id}`;
+                el.draggable = true;
+                el.className = "bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-sm px-4 py-2.5 rounded-xl shadow-sm cursor-grab active:cursor-grabbing transition-all select-none";
+                el.innerText = card.text;
+                
+                // Drag Events
+                el.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', JSON.stringify(card));
+                    el.classList.add('card-dragged');
+                });
+
+                el.addEventListener('dragend', () => {
+                    el.classList.remove('card-dragged');
+                });
+
+                // Touch / Click fallback selection
+                el.addEventListener('click', () => {
+                    handleCardClick(card, el);
+                });
+
+                container.appendChild(el);
+            });
+        }
+
+        function handleCardClick(card, element) {
+            if (selectedCard && selectedCard.id === card.id) {
+                selectedCard = null;
+                element.classList.remove('ring-4', 'ring-amber-400');
+            } else {
+                if (selectedCard) {
+                    const prevEl = document.getElementById(`card-${selectedCard.id}`);
+                    if (prevEl) prevEl.classList.remove('ring-4', 'ring-amber-400');
+                }
+                selectedCard = card;
+                element.classList.add('ring-4', 'ring-amber-400');
+            }
+        }
+
+        // DROP ZONE LOGIC
+        function setupDropZones() {
+            const zones = document.querySelectorAll('.drop-zone');
+            
+            zones.forEach(zone => {
+                zone.addEventListener('dragover', (e) => {
+                    e.preventDefault();
+                    zone.classList.add('drop-zone-active');
+                });
+
+                zone.addEventListener('dragleave', () => {
+                    zone.classList.remove('drop-zone-active');
+                });
+
+                zone.addEventListener('drop', (e) => {
+                    e.preventDefault();
+                    zone.classList.remove('drop-zone-active');
+                    const cardData = JSON.parse(e.dataTransfer.getData('text/plain'));
+                    processClassification(cardData, zone.getAttribute('data-category'));
+                });
+
+                // Click on zone fallback
+                zone.addEventListener('click', () => {
+                    if (selectedCard) {
+                        processClassification(selectedCard, zone.getAttribute('data-category'));
+                        selectedCard = null;
+                    }
+                });
+            });
+        }
+
+        function processClassification(card, targetCategory) {
+            if (card.category === targetCategory) {
+                // CORRECT CLASSIFICATION
+                placeCardInZone(card, targetCategory);
+                
+                // Remove from activeCards
+                activeCards = activeCards.filter(c => c.id !== card.id);
+                
+                // Remove element from available container
+                const cardEl = document.getElementById(`card-${card.id}`);
+                if (cardEl) cardEl.remove();
+
+                completedCount++;
+                updateProgress();
+
+                if (completedCount === currentStory.cards.length) {
+                    setTimeout(() => {
+                        alert('🎉 ¡Felicitaciones! Has completado la actividad correctamente.');
+                    }, 300);
+                }
+            } else {
+                // INCORRECT - SHOW HINT DIALOG
+                showPromptModal(card.category);
+            }
+        }
+
+        function placeCardInZone(card, category) {
+            const zone = document.getElementById(`zone-${category}`);
+            const placeholder = zone.querySelector('.empty-placeholder');
+            if (placeholder) placeholder.remove();
+
+            const cardBadge = document.createElement('div');
+            cardBadge.className = "w-full bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold text-center text-sm py-3 px-2 rounded-xl shadow-sm animate-bounce-once";
+            cardBadge.innerText = card.text;
+            zone.appendChild(cardBadge);
+        }
+
+        function updateProgress() {
+            const total = currentStory.cards.length;
+            const pct = Math.round((completedCount / total) * 100);
+            
+            document.getElementById('progress-text').innerText = `${completedCount} de ${total}`;
+            document.getElementById('progress-bar').style.width = `${pct}%`;
+        }
+
+        // PROMPT / HINT MODAL
+        function showPromptModal(correctCategory) {
+            const meta = categoryMeta[correctCategory] || { prompt: 'Revisa las pistas del cuento.' };
+            
+            document.getElementById('hint-body').innerText = `"${meta.prompt}"`;
+            document.getElementById('hint-modal').classList.remove('hidden');
+        }
+
+        function closeHintModal() {
+            document.getElementById('hint-modal').classList.add('hidden');
+        }
+
+        // CREATE NEW STORY MODAL LOGIC
+        function openNewStoryModal() {
+            const formList = document.getElementById('cards-form-list');
+            formList.innerHTML = '';
+            
+            // Render 3 default input rows
+            for(let i = 0; i < 3; i++) {
+                addCardInputRow();
+            }
+
+            document.getElementById('new-story-modal').classList.remove('hidden');
+        }
+
+        function closeNewStoryModal() {
+            document.getElementById('new-story-modal').classList.add('hidden');
+        }
+
+        function addCardInputRow() {
+            const formList = document.getElementById('cards-form-list');
+            const row = document.createElement('div');
+            row.className = "flex gap-2 items-center card-input-row";
+            row.innerHTML = `
+                <input type="text" placeholder="Texto de tarjeta" required class="card-text border border-slate-300 rounded-lg px-3 py-2 text-sm flex-1 focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                <select class="card-category border border-slate-300 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                    <option value="quien">¿Quién?</option>
+                    <option value="objetos">¿Qué objetos?</option>
+                    <option value="evento">¿Qué tarea-evento?</option>
+                    <option value="donde">¿Dónde?</option>
+                    <option value="hace">¿Qué hace?</option>
+                </select>
+                <button type="button" onclick="this.parentElement.remove()" class="text-rose-500 hover:text-rose-700 p-1">
+                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                </button>
+            `;
+            formList.appendChild(row);
+            lucide.createIcons();
+        }
+
+        function handleSaveStory(e) {
+            e.preventDefault();
+            const title = document.getElementById('story-title').value;
+            const desc = document.getElementById('story-desc').value;
+
+            const cardRows = document.querySelectorAll('.card-input-row');
+            const cards = [];
+
+            cardRows.forEach((row, idx) => {
+                const text = row.querySelector('.card-text').value.trim();
+                const category = row.querySelector('.card-category').value;
+                if (text) {
+                    cards.push({ id: 'custom-' + Date.now() + '-' + idx, text, category });
+                }
+            });
+
+            if (cards.length === 0) {
+                alert('Por favor agrega al menos una tarjeta.');
+                return;
+            }
+
+            const newStory = {
+                id: 'custom-' + Date.now(),
+                title,
+                description: desc,
+                cards
+            };
+
+            stories.push(newStory);
+            saveStoriesToStorage();
+            renderDashboard();
+            closeNewStoryModal();
+            
+            // Reset form
+            document.getElementById('new-story-form').reset();
+        }
+
+        function deleteStory(id) {
+            if (confirm('¿Seguro que deseas eliminar este cuento?')) {
+                stories = stories.filter(s => s.id !== id);
+                saveStoriesToStorage();
+                renderDashboard();
+            }
+        }
+
+        // JSON IMPORT / EXPORT
+        function exportStoriesJSON() {
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(stories, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", "cuentos_clasificador.json");
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function exportSingleJSON(id) {
+            const story = stories.find(s => s.id === id);
+            if (!story) return;
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(story, null, 2));
+            const downloadAnchor = document.createElement('a');
+            downloadAnchor.setAttribute("href", dataStr);
+            downloadAnchor.setAttribute("download", `${story.title.toLowerCase().replace(/\s+/g, '_')}.json`);
+            document.body.appendChild(downloadAnchor);
+            downloadAnchor.click();
+            downloadAnchor.remove();
+        }
+
+        function importStoriesJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (Array.isArray(parsed)) {
+                        stories = parsed;
+                    } else if (parsed && parsed.id && parsed.cards) {
+                        stories.push(parsed);
+                    }
+                    saveStoriesToStorage();
+                    renderDashboard();
+                    alert('¡Cuentos cargados exitosamente!');
+                } catch(err) {
+                    alert('El archivo JSON no tiene un formato válido.');
+                }
+            };
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
